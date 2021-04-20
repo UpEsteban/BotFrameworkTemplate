@@ -3,7 +3,10 @@
 
 namespace Microsoft.BotBuilderSamples.Dialogs
 {
+    using CoreBot;
     using CoreBot.Dialogs.SimpleDialog;
+    using CoreBot.Helpers;
+    using Microsoft.Bot.Builder;
     using Microsoft.Bot.Builder.Dialogs;
     using Microsoft.Extensions.Logging;
     using System.Threading;
@@ -11,16 +14,19 @@ namespace Microsoft.BotBuilderSamples.Dialogs
 
     public class MainDialog : ComponentDialog
     {
-
         protected readonly ILogger Logger;
 
-        public MainDialog( SimpleDialog bookingDialog, ILogger<MainDialog> logger)
+        private IStatePropertyAccessor<ConversationData> _conversationStateAccessor;
+
+        public MainDialog(ConversationState conversationState, ILogger<MainDialog> logger)
             : base(nameof(MainDialog))
         {
+            _conversationStateAccessor = conversationState.CreateProperty<ConversationData>(nameof(ConversationData));
+
             Logger = logger;
 
             AddDialog(new TextPrompt(nameof(TextPrompt)));
-            AddDialog(bookingDialog);
+            AddDialog(new SimpleDialog());
             AddDialog(new WaterfallDialog(nameof(WaterfallDialog), new WaterfallStep[]
             {
                 IntroStepAsync,
@@ -38,7 +44,7 @@ namespace Microsoft.BotBuilderSamples.Dialogs
 
         private async Task<DialogTurnResult> ActStepAsync(WaterfallStepContext stepContext, CancellationToken cancellationToken)
         {
-            return await stepContext.BeginDialogAsync(nameof(SimpleDialog), new SimpleData(), cancellationToken);
+                return await BotRouter.Router(stepContext, _conversationStateAccessor);
         }
 
         private async Task<DialogTurnResult> FinalStepAsync(WaterfallStepContext stepContext, CancellationToken cancellationToken)

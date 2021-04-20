@@ -14,10 +14,6 @@ namespace Microsoft.BotBuilderSamples.Dialogs
 
     public class SimpleDialog : BaseDialog
     {
-        private const string DestinationStepMsgText = "Where would you like to travel to?";
-
-        private const string OriginStepMsgText = "Where are you traveling from?";
-
         public SimpleDialog()
             : base(nameof(SimpleDialog))
         {
@@ -37,7 +33,7 @@ namespace Microsoft.BotBuilderSamples.Dialogs
 
         private async Task<DialogTurnResult> InitialStepAsync(WaterfallStepContext stepContext, CancellationToken cancellationToken)
         {
-            var messageText = "Dime que quieres comer hoy.";
+            var messageText = "What would you like to eat?";
             var promptMessage = MessageFactory.Text(messageText, messageText, InputHints.ExpectingInput);
             return await stepContext.PromptAsync(nameof(TextPrompt), new PromptOptions { Prompt = promptMessage }, cancellationToken);
         }
@@ -45,14 +41,14 @@ namespace Microsoft.BotBuilderSamples.Dialogs
         private async Task<DialogTurnResult> ConfirmationStepAsync(WaterfallStepContext stepContext, CancellationToken cancellationToken)
         {
             ((SimpleData)stepContext.Options).Selection = stepContext.Result.ToString();
-            var messageText = $"Perfecto, me confirma que tu pedido es : {stepContext.Result}";
+            var messageText = $"Please confirm that your order is: {stepContext.Result}";
             var promptMessage = MessageFactory.Text(messageText, messageText, InputHints.ExpectingInput);
             return await stepContext.PromptAsync(nameof(ConfirmPrompt), new PromptOptions { Prompt = promptMessage }, cancellationToken);
         }
 
         private async Task<DialogTurnResult> ResolveStepAsync(WaterfallStepContext stepContext, CancellationToken cancellationToken)
         {
-            var messageText = $"Perfecto, se ha añadido a tu pedido y llegara en breves momentos.";
+            var messageText = $"It has been added to your order and will arrive shortly.";
             if (!(bool)stepContext.Result)
                 return await BackStepAsync(stepContext, 3);
 

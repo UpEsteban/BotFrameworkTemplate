@@ -1,8 +1,9 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
-// Licensed under the MIT License.
-
+﻿using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using CoreBot;
+using CoreBot.Helpers.BotService;
+using Microsoft.Azure.CognitiveServices.Language.LUIS.Runtime.Models;
 using Microsoft.Bot.Builder;
 using Microsoft.Bot.Builder.Dialogs;
 using Microsoft.Bot.Schema;
@@ -10,42 +11,65 @@ using Microsoft.Extensions.Logging;
 
 namespace Microsoft.BotBuilderSamples.Bots
 {
-    // This IBot implementation can run any type of Dialog. The use of type parameterization is to allows multiple different bots
-    // to be run at different endpoints within the same project. This can be achieved by defining distinct Controller types
-    // each with dependency on distinct IBot types, this way ASP Dependency Injection can glue everything together without ambiguity.
-    // The ConversationState is used by the Dialog system. The UserState isn't, however, it might have been used in a Dialog implementation,
-    // and the requirement is that all BotState objects are saved at the end of a turn.
-    public class DialogBot<T> : ActivityHandler
-        where T : Dialog
+    public class DialogBot<T> : ActivityHandler where T : Dialog
     {
-        protected readonly Dialog Dialog;
-        protected readonly BotState ConversationState;
-        protected readonly BotState UserState;
-        protected readonly ILogger Logger;
+        protected readonly Dialog dialog;
+        protected readonly BotState userState;
+        protected readonly BotState conversationState;
 
-        public DialogBot(ConversationState conversationState, UserState userState, T dialog, ILogger<DialogBot<T>> logger)
+        protected readonly ILogger logger;
+        protected readonly IBotServices botServices;
+
+        public DialogBot(ConversationState conversationState, UserState userState, T dialog, ILogger<DialogBot<T>> logger, IBotServices botServices)
         {
-            ConversationState = conversationState;
-            UserState = userState;
-            Dialog = dialog;
-            Logger = logger;
+            this.conversationState = conversationState;
+            this.userState = userState;
+            this.dialog = dialog;
+            this.logger = logger;
+            this.botServices = botServices;
+        }
+
+        protected override async Task OnMessageActivityAsync(ITurnContext<IMessageActivity> turnContext, CancellationToken cancellationToken)
+        {
+            await RecognizerResultAsync(turnContext, cancellationToken);
+
+            // Set spanish language
+            turnContext.Activity.Locale = "es-ES";
+
+            // Run the Dialog with the new message Activity.
+            await dialog.RunAsync(turnContext, conversationState.CreateProperty<DialogState>(nameof(DialogState)), cancellationToken);
         }
 
         public override async Task OnTurnAsync(ITurnContext turnContext, CancellationToken cancellationToken = default(CancellationToken))
         {
             await base.OnTurnAsync(turnContext, cancellationToken);
 
-            // Save any state changes that might have occurred during the turn.
-            await ConversationState.SaveChangesAsync(turnContext, false, cancellationToken);
-            await UserState.SaveChangesAsync(turnContext, false, cancellationToken);
+            // Save any state changes that might have occured during the turn.
+            await conversationState.SaveChangesAsync(turnContext, false, cancellationToken);
+            await userState.SaveChangesAsync(turnContext, false, cancellationToken);
         }
 
-        protected override async Task OnMessageActivityAsync(ITurnContext<IMessageActivity> turnContext, CancellationToken cancellationToken)
+        protected override async Task OnMembersAddedAsync(IList<ChannelAccount> membersAdded, ITurnContext<IConversationUpdateActivity> turnContext, CancellationToken cancellationToken)
         {
-            Logger.LogInformation("Running dialog with Message Activity.");
 
-            // Run the Dialog with the new message Activity.
-            await Dialog.RunAsync(turnContext, ConversationState.CreateProperty<DialogState>("DialogState"), cancellationToken);
+            foreach (var member in membersAdded)
+            {
+                if (member.Id != turnContext.Activity.Recipient.Id)
+                {
+                    await turnContext.SendActivityAsync(MessageFactory.Text("Bienvenido!! Soy DemoBot y esto aqui para enseñarte todas las ventajas de un chatbot."), CancellationToken.None);
+                }
+            }
+        }
+
+        private async Task RecognizerResultAsync(ITurnContext<IMessageActivity> turnContext, CancellationToken cancellationToken)
+        {
+            var ConversationStateAccessor = conversationState.CreateProperty<ConversationData>(nameof(ConversationData));
+            var conversation = await ConversationStateAccessor.GetAsync(turnContext, () => new ConversationData());
+
+            // First, we use the dispatch model to determine which cognitive service (LUIS or QnA) to use.
+            conversation.RecognizerResult = await botServices.Dispatch.RecognizeAsync(turnContext, cancellationToken);
+
+            conversation.LuisResult = conversation.RecognizerResult.Properties["luisResult"] as LuisResult;
         }
     }
 }
